@@ -6,10 +6,12 @@
 #include <thread>
 #include <chrono>
 #include <Carbon/Carbon.h>
+#include <curses.h>
 
 using namespace std;
 
 const int INIT_INVADERS = 8;
+WINDOW *stdscr;
 
 struct invObj {
     
@@ -37,14 +39,19 @@ struct pacObj {
     void takestep(vector <string> &mymap, bool rightDir);
     
     pacObj() {
-        x = 4;
-        y = 6;
+        x = 16;
+        y = 2;
     }
     
 };
 
-bool isPressed(unsigned short inKeyCode)
-{
+int move(int y, int x);
+int wmove(WINDOW *win, int y, int x);
+int refresh(void);
+int wrefresh(WINDOW *win);
+
+bool isPressed(unsigned short inKeyCode) {
+    
     unsigned char keyMap[16];
     GetKeys((BigEndianUInt32*) &keyMap);
     return (0 != ((keyMap[ inKeyCode >> 3] >> (inKeyCode & 7)) & 1));
@@ -83,7 +90,6 @@ vector<string> loadMap(string myMap){
     file.close();
     
     return mapFile;
-    
 }
 
 //init all elements related to the game (your initial location, aliens, map, etc)
@@ -101,14 +107,17 @@ void init(vector <string> &gameMap, vector<invObj> &invaders){
     cout << "Enter the name of the map: ";
     getline(cin, mapName);
 
-    gameMap = loadMap("map3.txt");
+    gameMap = loadMap("/Users/jmcilhargey/Downloads/map3.txt");
 }
 
 //draws to the screen
 
-void updateScreen(vector<string> & myMap) {
+void updateScreen(vector<string> &myMap) {
     
-    // gotoxy(0, 0);
+    // initscr();
+    // move(0, 0);
+    // wmove(stdscr, 0, 0);
+    // refresh();
     
     for (string line : myMap) {
         cout << line << endl;
@@ -171,11 +180,15 @@ void moveInvaders(vector<string> &myMap, vector<invObj> &invaders){
 
 void pacObj::takestep(vector <string> &myMap, bool rightDir){
     
-    if (rightDir && myMap.at(x + 1).at(y) != '#') {
-        x++;
-    } else if (myMap.at(x - 1).at(y) != '#') {
+    if (rightDir && myMap.at(x).at(y + 1) != '#') {
+        myMap.at(x).at(y) = ' ';
         y++;
+    } else if (!rightDir && myMap.at(x).at(y - 1) != '#') {
+        myMap.at(x).at(y) = ' ';
+        y--;
     }
+    
+    myMap.at(x).at(y) = pacCh;
 }
 
 int main() {
@@ -195,6 +208,7 @@ int main() {
         
         moveInvaders(gameMap, invaders);
         updateScreen(gameMap);
+        pac.takestep(gameMap, true);
     }
 
     do {
