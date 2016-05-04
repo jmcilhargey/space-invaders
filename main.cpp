@@ -1,17 +1,17 @@
 #include <iostream>
-// #include "windows.h"
 #include <vector>
 #include <fstream>
 #include <string>
 #include <thread>
 #include <chrono>
 #include <Carbon/Carbon.h>
-#include <curses.h>
+#include <stdio.h>
+#include <stdlib.h>
+// #include "windows.h"
 
 using namespace std;
 
 const int INIT_INVADERS = 8;
-WINDOW *stdscr;
 
 struct invObj {
     
@@ -22,13 +22,12 @@ struct invObj {
     bool moveRight = true;
     
     invObj(int xVal, int yVal) {
-        
         x = xVal;
         y = yVal;
     }
-    
-    //void kill(){ alive = false; }
-    
+    void kill(){
+        alive = false;
+    }
 };
 
 struct pacObj {
@@ -36,28 +35,27 @@ struct pacObj {
     const char pacCh = '^';
     int x;
     int y;
-    void takestep(vector <string> &mymap, bool rightDir);
+    void takeStep(vector <string> &myMap, bool rightDir);
     
     pacObj() {
         x = 16;
-        y = 2;
+        y = 3;
     }
-    
 };
 
-int move(int y, int x);
-int wmove(WINDOW *win, int y, int x);
-int refresh(void);
-int wrefresh(WINDOW *win);
+struct shotObj {
+    const char shotCh = '!';
+    int x;
+    int y;
+    bool currShot = false;
+    /*shotObj(int xVal, int yVal) {
+        x = xVal;
+        y = yVal;
+    }*/
+    void takeShot(vector <string> &myMap, const pacObj &pac, vector<invObj> &invaders, int &score, bool fire);
+};
 
-bool isPressed(unsigned short inKeyCode) {
-    
-    unsigned char keyMap[16];
-    GetKeys((BigEndianUInt32*) &keyMap);
-    return (0 != ((keyMap[ inKeyCode >> 3] >> (inKeyCode & 7)) & 1));
-}
-
-//sets cursor to position 0,0 .. no need to modify
+// PC version to set cursor to position 0,0
 /*
 bool gotoxy(const WORD x, const WORD y) {
     
@@ -68,6 +66,12 @@ bool gotoxy(const WORD x, const WORD y) {
     return SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), xy);
 }*/
 
+// Mac version of gotoxy
+
+void gotoxy(int x, int y) {
+    printf("%c[%d;%df",0x1B,y,x);
+}
+
 vector<string> loadMap(string myMap){
     
     fstream file;
@@ -75,7 +79,6 @@ vector<string> loadMap(string myMap){
     vector<string> mapFile;
     
     file.open(myMap, ios::in);
-    
     
     if (file) {
         
@@ -86,13 +89,12 @@ vector<string> loadMap(string myMap){
     } else {
         cout << "Map not found." << endl;
     }
-    
     file.close();
     
     return mapFile;
 }
 
-//init all elements related to the game (your initial location, aliens, map, etc)
+// Initialize invaders, ask for map name, and load map
 
 void init(vector <string> &gameMap, vector<invObj> &invaders){
     
@@ -107,17 +109,12 @@ void init(vector <string> &gameMap, vector<invObj> &invaders){
     cout << "Enter the name of the map: ";
     getline(cin, mapName);
 
-    gameMap = loadMap("/Users/jmcilhargey/Downloads/map3.txt");
+    gameMap = loadMap("/Users/jmcilhargey/Documents/comp-sci-assignments/Space_Invaders/Space_Invaders/map3.txt");
 }
 
-//draws to the screen
+// Draws map to the screen
 
 void updateScreen(vector<string> &myMap) {
-    
-    // initscr();
-    // move(0, 0);
-    // wmove(stdscr, 0, 0);
-    // refresh();
     
     for (string line : myMap) {
         cout << line << endl;
@@ -125,70 +122,98 @@ void updateScreen(vector<string> &myMap) {
     
 }
 
-//move invaders 1 step
+// Moves invaders over 1 character
 
-void moveInvaders(vector<string> &myMap, vector<invObj> &invaders){
+void moveInvaders(vector<string> &myMap, vector<invObj> &invaders) {
     
-    if (invaders.back().moveRight) {
-        
-        if (myMap.at(invaders.back().x).at(invaders.back().y + 1) == '#') {
-            
+   char nextStep = invaders.back().moveRight ? myMap.at(invaders.front().x).at(invaders.front().y - 1) : myMap.at(invaders.back().x).at(invaders.back().y + 1);
+    
+   // char nextStep = myMap.at(invaders.at((invaders.size() - 1) * invaders.at(0).moveRight).x).at(invaders.at((invaders.size() - 1) * invaders.at(0).moveRight).y - 1 + 2 * invaders.at(0).moveRight);
+    
+    
+    switch (nextStep) {
+        case '#'  :
             for (invObj &invader : invaders) {
-                invader.moveRight = false;
-                
-                for (invObj &invader : invaders) {
-                    myMap.at(invader.x).at(invader.y) = ' ';
-                }
+                invader.moveRight = !invader.moveRight;
+                myMap.at(invader.x).at(invader.y) = ' ';
                 invader.x++;
             }
-        } else {
-            
+            break;
+        default :
             for (invObj &invader : invaders) {
-                invader.y++;
+                invader.y = invader.y + 1 - 2 * (invader.moveRight);
             }
-        }
-        myMap.at(invaders.front().x).at(invaders.front().y - 1) = ' ';
-        
-    } else {
-        
-        if (myMap.at(invaders.front().x).at(invaders.front().y - 1) == '#') {
-            
-            for (invObj &invader : invaders) {
-                
-                invader.moveRight = true;
-    
-                for (invObj &invader : invaders) {
-                    myMap.at(invader.x).at(invader.y) = ' ';
-                }
-                invader.x++;
-            }
-        } else {
-            
-            for (invObj &invader : invaders) {
-                invader.y--;
-            }
-        }
-        myMap.at(invaders.back().x).at(invaders.back().y + 1) = ' ';
-    }
-    
+            invaders.back().moveRight ? myMap.at(invaders.back().x).at(invaders.back().y + 1) = ' ' : myMap.at(invaders.front().x).at(invaders.front().y - 1) = ' ';
+            break;
+    };
+
     for (invObj &invader : invaders) {
-        myMap.at(invader.x).at(invader.y) = invader.alien;
+        if (invader.alive) {
+            myMap.at(invader.x).at(invader.y) = invader.alien;
+        } else {
+            myMap.at(invader.x).at(invader.y) = ' ';
+        }
     }
+
 }
 
-//move you one step
+// Moves the ship 1 character
 
-void pacObj::takestep(vector <string> &myMap, bool rightDir){
+void pacObj::takeStep(vector <string> &myMap, bool rightDir) {
     
-    if (rightDir && myMap.at(x).at(y + 1) != '#') {
-        myMap.at(x).at(y) = ' ';
-        y++;
-    } else if (!rightDir && myMap.at(x).at(y - 1) != '#') {
-        myMap.at(x).at(y) = ' ';
-        y--;
+    char nextStep = myMap.at(x).at(y - 1 + 2 * rightDir);
+    
+    switch (nextStep) {
+        case ' ':
+            myMap.at(x).at(y) = ' ';
+            y += 2 * rightDir - 1;
+            myMap.at(x).at(y) = pacCh;
+            break;
+    };
+}
+
+// Takes a new shot or moves the shot 1 character
+
+void shotObj::takeShot(vector <string> &myMap, const pacObj &pac, vector<invObj> &invaders, int &score, bool fire) {
+    
+    if (fire && !currShot) {
+        x = pac.x - 1;
+        y = pac.y;
+        currShot = true;
     }
     
-    myMap.at(x).at(y) = pacCh;
+    if (currShot) {
+        
+        char nextStep = myMap.at(x - 1).at(y);
+        
+        myMap.at(x).at(y) = ' ';
+        
+        switch (nextStep) {
+        case ' ':
+                x--;
+                myMap.at(x).at(y) = shotCh;
+            break;
+        case '#':
+                currShot = false;
+            break;
+        case 'x':
+                score++;
+                myMap.at(x - 1).at(y) = ' ';
+                currShot = false;
+            break;
+        case 'A':
+                score++;
+                for (invObj &invader : invaders) {
+                    if (y == invader.y) {
+                        invader.kill();
+                    }
+                }
+                currShot = false;
+            break;
+        }
+    }
+    
+    
 }
 
 int main() {
@@ -199,49 +224,56 @@ int main() {
     vector<string> gameMap;
     vector<invObj> invaders;
     pacObj pac;
-
-    init(gameMap, invaders);
+    shotObj shot;
     
-    while (game_running) {
+    init(gameMap, invaders);
+
+    do {
+        
+        gotoxy(0, 0);
         
         this_thread::sleep_for(chrono::milliseconds(speed));
         
         moveInvaders(gameMap, invaders);
         updateScreen(gameMap);
-        pac.takestep(gameMap, true);
-    }
-
-    do {
+        shot.takeShot(gameMap, pac, invaders, score, false);
         
-        if (isPressed(29)) {
+        gameMap.at(pac.x).at(pac.y) = pac.pacCh;
+        
+        if (CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_LeftArrow)) {
 
-            pac.takestep(gameMap, true);
+            pac.takeStep(gameMap, false);
         }
-        if (isPressed(28)) {
+        if (CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_RightArrow)) {
             
-            pac.takestep(gameMap, false);
+            pac.takeStep(gameMap, true);
         }
-        if (isPressed(31)) {
+        if (CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_Space)) {
+            
+           shot.takeShot(gameMap, pac, invaders, score, true);
+        }
+        if (CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_DownArrow)) {
     
             speed += 10;
         }
-        if (isPressed(30)) {
+        if (CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_UpArrow)) {
             
             speed -= 10;
         }
-        if (isPressed(27)){
+        if (CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_Escape)){
             
             game_running = false;
         }
-        updateScreen(gameMap);
+        
+        cout << "Current score: " << score << endl;
     
-    } while (game_running == true && score != INIT_INVADERS);
+    } while (game_running && score != INIT_INVADERS);
 
-    //    system("cls");
+    // system("cls");
     
     cout << "\n\nGAME OVER";
     
-    system("pause>nul");
+    // system("pause>nul");
     
     return 0;
 }
