@@ -3,11 +3,11 @@
 #include <fstream>
 #include <string>
 #include <thread>
-#include <chrono>
-#include <Carbon/Carbon.h>
-#include <stdio.h>
-#include <stdlib.h>
-// #include "windows.h"
+#include <chrono> // Used for sleep delay
+#include <Carbon/Carbon.h> // Used for key press
+#include <ncurses.h> // Used for clear screen
+
+/* To get working in terminal, include the Carbon.framework and libncurses.tbd in Xcode using 'Link Binary With Libraries' */
 
 using namespace std;
 
@@ -48,25 +48,10 @@ struct shotObj {
     int x;
     int y;
     bool currShot = false;
-    /*shotObj(int xVal, int yVal) {
-        x = xVal;
-        y = yVal;
-    }*/
     void takeShot(vector <string> &myMap, const pacObj &pac, vector<invObj> &invaders, int &score, bool fire);
 };
 
-// PC version to set cursor to position 0,0
-/*
-bool gotoxy(const WORD x, const WORD y) {
-    
-    COORD xy;
-    xy.X = x;
-    xy.Y = y;
-    
-    return SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), xy);
-}*/
-
-// Mac version of gotoxy
+// Mac version to set cursor position to 0, 0
 
 void gotoxy(int x, int y) {
     printf("%c[%d;%df",0x1B,y,x);
@@ -126,10 +111,7 @@ void updateScreen(vector<string> &myMap) {
 
 void moveInvaders(vector<string> &myMap, vector<invObj> &invaders) {
     
-   char nextStep = invaders.back().moveRight ? myMap.at(invaders.front().x).at(invaders.front().y - 1) : myMap.at(invaders.back().x).at(invaders.back().y + 1);
-    
-   // char nextStep = myMap.at(invaders.at((invaders.size() - 1) * invaders.at(0).moveRight).x).at(invaders.at((invaders.size() - 1) * invaders.at(0).moveRight).y - 1 + 2 * invaders.at(0).moveRight);
-    
+    char nextStep = myMap.at(invaders.at((invaders.size() - 1) * invaders.at(0).moveRight).x).at(invaders.at((invaders.size() - 1) * invaders.at(0).moveRight).y + 2 * invaders.at(0).moveRight - 1);
     
     switch (nextStep) {
         case '#'  :
@@ -141,9 +123,9 @@ void moveInvaders(vector<string> &myMap, vector<invObj> &invaders) {
             break;
         default :
             for (invObj &invader : invaders) {
-                invader.y = invader.y + 1 - 2 * (invader.moveRight);
+                invader.y = invader.y + 2 * (invader.moveRight) - 1;
             }
-            invaders.back().moveRight ? myMap.at(invaders.back().x).at(invaders.back().y + 1) = ' ' : myMap.at(invaders.front().x).at(invaders.front().y - 1) = ' ';
+            myMap.at(invaders.at((invaders.size() - 1) * !invaders.at(0).moveRight).x).at(invaders.at((invaders.size() - 1) * !invaders.at(0).moveRight).y - 2 * invaders.at(0).moveRight + 1) = ' ';
             break;
     };
 
@@ -177,9 +159,9 @@ void pacObj::takeStep(vector <string> &myMap, bool rightDir) {
 void shotObj::takeShot(vector <string> &myMap, const pacObj &pac, vector<invObj> &invaders, int &score, bool fire) {
     
     if (fire && !currShot) {
+        currShot = true;
         x = pac.x - 1;
         y = pac.y;
-        currShot = true;
     }
     
     if (currShot) {
@@ -197,17 +179,20 @@ void shotObj::takeShot(vector <string> &myMap, const pacObj &pac, vector<invObj>
                 currShot = false;
             break;
         case 'x':
-                score++;
                 myMap.at(x - 1).at(y) = ' ';
                 currShot = false;
             break;
         case 'A':
-                score++;
+                /*
+                if (invaders.at(invaders.size() - 1).y == y) {
+                    invaders.pop_back();
+                }*/
                 for (invObj &invader : invaders) {
-                    if (y == invader.y) {
+                    if (invader.y == y) {
                         invader.kill();
                     }
                 }
+                score++;
                 currShot = false;
             break;
         }
@@ -222,21 +207,25 @@ int main() {
     int score = 0;
     bool game_running = true;
     vector<string> gameMap;
-    vector<invObj> invaders;
+    vector<invObj>  invaders;
     pacObj pac;
     shotObj shot;
     
     init(gameMap, invaders);
-
+    
+    // Using ncurses, clear the screen and refresh
+    initscr();
+    refresh();
+    
     do {
-        
+
         gotoxy(0, 0);
         
         this_thread::sleep_for(chrono::milliseconds(speed));
         
         moveInvaders(gameMap, invaders);
-        updateScreen(gameMap);
         shot.takeShot(gameMap, pac, invaders, score, false);
+        updateScreen(gameMap);
         
         gameMap.at(pac.x).at(pac.y) = pac.pacCh;
         
@@ -270,8 +259,9 @@ int main() {
     } while (game_running && score != INIT_INVADERS);
 
     // system("cls");
-    
-    cout << "\n\nGAME OVER";
+    if (score == INIT_INVADERS) {
+        cout << "\n\nYOU WIN!";
+    }
     
     // system("pause>nul");
     
